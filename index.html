@@ -858,7 +858,7 @@ function buildMapping(){
 
 function autoMatch(header,fieldKey){
   const h=header.toLowerCase().replace(/[^a-z0-9]/g,'');
-  const maps={nome:['nome','name','cliente','lead'],wpp:['whatsapp','wpp','telefone','phone','fone','celular'],
+  const maps={nome:['nome','name','full_name','fullname','cliente','lead'],wpp:['whatsapp','wpp','telefone','phone','fone','celular'],
     source:['origem','source','canal'],loja:['loja','store','shop','mercadolivre'],
     fat:['faturamento','revenue','fat','receita'],caixa:['caixa','capital','investimento','disponivel'],
     notes:['notas','notes','obs','observacao','anotacao']};
