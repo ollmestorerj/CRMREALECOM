@@ -285,7 +285,13 @@ td.name{color:var(--text);font-weight:500}
 
     <!-- KANBAN -->
     <div class="page" id="page-kanban">
-      <div style="margin-bottom:12px;font-size:12px;color:var(--text3);font-family:'DM Mono',monospace">↔ Arraste os cards entre colunas para mover leads no funil — salva automaticamente</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="position:relative;flex:1;min-width:200px;max-width:320px">
+          <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.4;pointer-events:none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="kanbanSearchInput" class="search-input" style="width:100%;padding-left:32px" placeholder="Buscar lead no kanban..." oninput="kanbanSearch=this.value;renderKanban()">
+        </div>
+        <div style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap">↔ Arraste os cards para mover no funil</div>
+      </div>
       <div class="kanban-wrap"><div class="kanban" id="kanbanBoard"></div></div>
     </div>
 
@@ -632,25 +638,32 @@ const STAGES=[
   {id:'fechado',label:'Venda fechada',color:'#22C55E'},
   {id:'perdido',label:'Perdido',color:'#EF4444'},
 ];
-let dragId=null,placeholder=null;
+// ── KANBAN STATE ─────────────────────────────────────
+let dragLeadId=null; // string to preserve bigint IDs
+let dragEl=null;
+let placeholder=null;
+let kanbanSearch='';
 
 function renderKanban(){
+  const q=kanbanSearch.toLowerCase().trim();
   const board=document.getElementById('kanbanBoard');
   board.innerHTML=STAGES.map(st=>{
-    const cards=LEADS.filter(l=>l.status===st.id);
-    return `<div class="kanban-col" id="col-${st.id}" data-stage="${st.id}"
-      ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)" ondrop="onDrop(event,this)">
+    let cards=LEADS.filter(l=>l.status===st.id);
+    if(q) cards=cards.filter(l=>l.nome.toLowerCase().includes(q)||l.wpp.includes(q));
+    return `<div class="kanban-col" id="col-${st.id}" data-stage="${st.id}">
       <div class="kanban-header">
         <div class="kanban-title"><div class="kanban-dot" style="background:${st.color}"></div>${st.label}</div>
         <span class="kanban-count">${cards.length}</span>
       </div>
-      <div class="kanban-body" id="body-${st.id}"
-        ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)" ondrop="onDrop(event,this)">
-        ${cards.map(l=>`<div class="lead-card" id="card-${l.id}" data-id="${l.id}" draggable="true" ondblclick="openLeadDetail(${l.id})">
-          <div class="lead-name">${l.nome}</div>
-          <div class="lead-meta"><span>${l.wpp}</span><span>${l.fat}</span>${l.caixa!=='nao informado'?`<span>💰 ${l.caixa}</span>`:''}</div>
-          <span class="lead-tag tag-${l.source}">${l.source==='webinar'?'Webinário':l.source==='landing'?'Landing':'Manual'}</span>
-        </div>`).join('')}
+      <div class="kanban-body" id="body-${st.id}">
+        ${cards.map(l=>{
+          const highlighted = q ? l.nome.replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<mark style="background:rgba(147,51,234,.35);border-radius:2px;padding:0 1px">$1</mark>') : l.nome;
+          return `<div class="lead-card" id="card-${l.id}" data-id="${l.id}" draggable="true" ondblclick="openLeadDetail(${l.id})">
+            <div class="lead-name">${highlighted}</div>
+            <div class="lead-meta"><span>${l.wpp}</span><span>${l.fat}</span>${l.caixa!=='nao informado'?`<span>💰 ${l.caixa}</span>`:''}</div>
+            <span class="lead-tag tag-${l.source}">${l.source==='webinar'?'Webinário':l.source==='landing'?'Landing':'Manual'}</span>
+          </div>`;
+        }).join('')}
         <button class="add-card-btn" onclick="openAddLeadInStage('${st.id}')">+ Adicionar</button>
       </div>
     </div>`;
@@ -660,56 +673,94 @@ function renderKanban(){
 
 function bindDragEvents(){
   document.querySelectorAll('.lead-card').forEach(card=>{
+    // DRAG START
     card.addEventListener('dragstart',e=>{
-      dragId=parseInt(card.dataset.id);
-      card.classList.add('dragging');
+      dragLeadId = card.dataset.id; // keep as string — bigint safe
+      dragEl = card;
       e.dataTransfer.effectAllowed='move';
-      placeholder=document.createElement('div');
-      placeholder.className='drop-placeholder';
-      setTimeout(()=>card.style.opacity='0.3',0);
+      e.dataTransfer.setData('text/plain', dragLeadId);
+      card.classList.add('dragging');
+      placeholder = document.createElement('div');
+      placeholder.className = 'drop-placeholder';
+      placeholder.style.pointerEvents = 'none';
+      setTimeout(()=>{ if(dragEl) dragEl.style.opacity='0.35'; },0);
     });
+    // DRAG END
     card.addEventListener('dragend',()=>{
-      card.classList.remove('dragging');card.style.opacity='';
-      if(placeholder&&placeholder.parentNode)placeholder.parentNode.removeChild(placeholder);
+      if(dragEl){ dragEl.classList.remove('dragging'); dragEl.style.opacity=''; }
+      if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
       document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
-      dragId=null;placeholder=null;
+      dragLeadId=null; dragEl=null; placeholder=null;
+    });
+  });
+
+  // Column bodies — drop targets
+  document.querySelectorAll('.kanban-body').forEach(body=>{
+    body.addEventListener('dragover',e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      const col=body.closest('.kanban-col');
+      document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
+      if(col) col.classList.add('drag-over');
+      if(placeholder){
+        const after=getDragAfterEl(body,e.clientY);
+        const btn=body.querySelector('.add-card-btn');
+        if(after && after!==placeholder) body.insertBefore(placeholder,after);
+        else if(!after && btn) body.insertBefore(placeholder,btn);
+      }
+    });
+    body.addEventListener('dragleave',e=>{
+      if(!body.contains(e.relatedTarget)){
+        body.closest('.kanban-col')?.classList.remove('drag-over');
+      }
+    });
+    body.addEventListener('drop',e=>{
+      e.preventDefault();
+      const id = e.dataTransfer.getData('text/plain') || dragLeadId;
+      if(!id) return;
+      const col=body.closest('.kanban-col');
+      const newStage=col?.dataset.stage;
+      if(!newStage) return;
+      col.classList.remove('drag-over');
+      moveLeadToStage(id, newStage);
     });
   });
 }
 
-function onDragOver(e,el){
-  e.preventDefault();e.dataTransfer.dropEffect='move';
-  const col=el.closest('.kanban-col');if(col)col.classList.add('drag-over');
-  const body=el.classList.contains('kanban-body')?el:el.querySelector('.kanban-body');
-  if(body&&placeholder&&!body.contains(placeholder)){
-    const after=getDragAfterEl(body,e.clientY);
-    if(after)body.insertBefore(placeholder,after);
-    else body.insertBefore(placeholder,body.querySelector('.add-card-btn'));
-  }
-}
-function onDragLeave(el){const col=el.closest('.kanban-col');if(col&&!col.matches(':hover'))col.classList.remove('drag-over');}
-async function onDrop(e,el){
-  e.preventDefault();
-  const col=el.closest('.kanban-col');if(!col||dragId===null)return;
-  const newStage=col.dataset.stage;
-  col.classList.remove('drag-over');
-  setSync('syncing');
-  const{error}=await db.from('leads').update({status:newStage}).eq('id',dragId);
-  if(error){setSync('off');alert('Erro ao salvar: '+error.message);return;}
-  const idx=LEADS.findIndex(l=>l.id===dragId);
-  if(idx>=0)LEADS[idx].status=newStage;
-  setSync('ok');
+async function moveLeadToStage(id, newStage){
+  // optimistic update — move in UI immediately
+  const idx=LEADS.findIndex(l=>String(l.id)===String(id));
+  if(idx<0) return;
+  const oldStage=LEADS[idx].status;
+  if(oldStage===newStage){ renderKanban(); return; }
+  LEADS[idx].status=newStage;
   renderKanban();
+  // persist to Supabase
+  setSync('syncing');
+  const{error}=await db.from('leads').update({status:newStage}).eq('id',id);
+  if(error){
+    setSync('off');
+    LEADS[idx].status=oldStage; // rollback
+    renderKanban();
+    alert('Erro ao salvar: '+error.message);
+    return;
+  }
+  setSync('ok');
 }
+
 function getDragAfterEl(container,y){
   const els=[...container.querySelectorAll('.lead-card:not(.dragging)')];
   return els.reduce((closest,child)=>{
     const box=child.getBoundingClientRect();
     const offset=y-box.top-box.height/2;
-    if(offset<0&&offset>closest.offset)return{offset,el:child};
+    if(offset<0 && offset>closest.offset) return{offset,el:child};
     return closest;
   },{offset:Number.NEGATIVE_INFINITY}).el;
 }
+
+function onDragOver(e,el){ e.preventDefault(); }
+function onDragLeave(el){}
+async function onDrop(e,el){ e.preventDefault(); }
 
 // ══════════════════════════════════════════════════════
 // LEADS TABLE
