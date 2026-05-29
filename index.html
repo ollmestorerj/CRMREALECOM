@@ -129,9 +129,9 @@ td.name{color:var(--text);font-weight:500}
 .mapping-table th{padding:7px 10px;background:var(--surface);color:var(--text3);text-align:left;font-family:'DM Mono',monospace;font-size:11px}
 .mapping-table td{padding:6px 10px;border-bottom:1px solid var(--border2);color:var(--text2)}
 .mapping-table select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace;outline:none;width:100%}
-.preview-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-top:20px}
+.preview-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-top:20px;max-width:100%;overflow:hidden}
 .preview-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;margin-bottom:12px}
-.preview-scroll{overflow-x:auto}
+.preview-scroll{overflow-x:auto;overflow-y:auto;max-height:260px;border-radius:var(--radius);border:1px solid var(--border)}
 .preview-table{border-collapse:collapse;font-size:12px;white-space:nowrap}
 .preview-table th{padding:6px 12px;background:var(--surface);color:var(--text3);font-family:'DM Mono',monospace;text-align:left;border-bottom:1px solid var(--border)}
 .preview-table td{padding:6px 12px;border-bottom:1px solid var(--border2);color:var(--text2)}
@@ -329,17 +329,14 @@ td.name{color:var(--text);font-weight:500}
         </div>
         <div class="import-card">
           <div class="import-card-title">🔗 Google Sheets</div>
-          <div class="import-card-sub">Cole o link da planilha uma vez — o CRM salva e sincroniza automaticamente toda vez que você clicar em <strong style="color:var(--purple-l)">Sincronizar</strong>. A planilha precisa ser pública (Compartilhar → Qualquer pessoa com o link → Leitor).</div>
-          <div class="gs-input-wrap">
-            <input class="gs-input" id="gsUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
-            <button class="btn btn-primary" onclick="importGoogleSheets(false)">Conectar</button>
-          </div>
-          <div style="margin-bottom:12px;padding:8px 10px;background:var(--surface);border-radius:var(--radius);font-size:11px;font-family:'DM Mono',monospace" id="gsSyncStatus"><span class="log-warn">Aguardando link...</span></div>
-          <button class="btn btn-primary" style="width:100%;margin-bottom:10px;gap:8px" onclick="importGoogleSheets(true)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Sincronizar agora
+          <div class="import-card-sub">Vincule uma ou mais planilhas. O CRM sincroniza cada uma separadamente e ignora duplicatas automaticamente.</div>
+
+          <div id="gsSheetsList"></div>
+
+          <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:12px;border-style:dashed" onclick="addSheetRow()">
+            + Adicionar outra planilha
           </button>
-          <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px">O CRM detecta automaticamente os leads novos e ignora duplicatas pelo WhatsApp.</div>
+          <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px">Planilha precisa ser pública: Compartilhar → Qualquer pessoa com o link → Leitor</div>
           <div class="import-log" id="gsLog"><span class="log-warn">Aguardando...</span></div>
         </div>
       </div>
@@ -357,7 +354,9 @@ td.name{color:var(--text);font-weight:500}
       <div id="previewSection" style="display:none">
         <div class="preview-wrap">
           <div class="preview-title">Pré-visualização <span id="previewCount" class="badge-info" style="font-size:11px;margin-left:8px"></span></div>
-          <div class="preview-scroll"><table class="preview-table" id="previewTable"></table></div>
+          <div style="overflow-x:auto;overflow-y:auto;max-height:200px;border-radius:var(--radius);border:1px solid var(--border2)">
+            <table class="preview-table" id="previewTable" style="min-width:100%"></table>
+          </div>
         </div>
       </div>
     </div>
@@ -863,7 +862,12 @@ function buildPreview(rows){
   document.getElementById('previewSection').style.display='block';
   document.getElementById('previewCount').textContent=importedRows.length+' registros';
   const heads=rows[0]||[];
-  document.getElementById('previewTable').innerHTML=`<thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map(r=>`<tr>${heads.map((_,i)=>`<td>${r[i]||''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const ki=[16,17,3,12,14,1].filter(i=>i<heads.length);
+  const ph=ki.map(i=>heads[i]);
+  const pr=rows.slice(1).map(r=>ki.map(i=>String(r[i]||'').slice(0,35)));
+  document.getElementById('previewTable').innerHTML=
+    '<thead><tr>'+ph.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead>'+
+    '<tbody>'+pr.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody>';
 }
 
 async function applyImport(){
@@ -924,41 +928,97 @@ function normalizeFat(v){
   return v||'começando';
 }
 
-const GS_KEY='re_gs_url';
+// ── MULTI-SHEET GOOGLE SHEETS ────────────────────────────────
+const GS_KEYS_KEY='re_gs_urls'; // JSON array of {url, label}
 
-function loadSavedGsUrl(){
-  const saved=localStorage.getItem(GS_KEY)||'';
-  const el=document.getElementById('gsUrl');
-  if(el&&saved)el.value=saved;
-  updateSyncStatus();
+function getSheetList(){
+  try{return JSON.parse(localStorage.getItem(GS_KEYS_KEY))||[];}catch(e){return [];}
+}
+function saveSheetList(list){localStorage.setItem(GS_KEYS_KEY,JSON.stringify(list));}
+
+function renderSheetRows(){
+  const list=getSheetList();
+  const container=document.getElementById('gsSheetsList');
+  if(!container)return;
+  if(list.length===0){
+    container.innerHTML=`<div style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;padding:8px 0;margin-bottom:8px">Nenhuma planilha vinculada ainda</div>`;
+    return;
+  }
+  container.innerHTML=list.map((s,i)=>`
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.label||'Planilha '+(i+1)}</div>
+        <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.url.slice(0,60)}${s.url.length>60?'...':''}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="syncSheet(${i})" title="Sincronizar">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Sincronizar
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="syncAllSheets()" title="Sincronizar todas">Todas</button>
+      <button class="btn btn-danger btn-sm" onclick="removeSheet(${i})" title="Remover">✕</button>
+    </div>`).join('');
 }
 
-function updateSyncStatus(){
-  const saved=localStorage.getItem(GS_KEY)||'';
-  const el=document.getElementById('gsSyncStatus');
-  if(!el)return;
-  if(saved){
-    const m=saved.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    el.innerHTML=`<span class="log-ok">✓ Planilha vinculada</span><span style="font-size:10px;color:var(--text3);margin-left:8px">ID: ${m?m[1].slice(0,20)+'...':''}</span>`;
-  } else {
-    el.innerHTML=`<span class="log-warn">Nenhuma planilha vinculada ainda</span>`;
+function addSheetRow(){
+  const url=prompt('Cole o link do Google Sheets:');
+  if(!url||!url.includes('spreadsheets'))return;
+  const label=prompt('Nome para identificar esta planilha (ex: Webinário Abril):','Planilha '+(getSheetList().length+1));
+  const list=getSheetList();
+  list.push({url:url.trim(),label:label||'Planilha '+(list.length+1)});
+  saveSheetList(list);
+  renderSheetRows();
+}
+
+function removeSheet(idx){
+  if(!confirm('Remover esta planilha da lista?'))return;
+  const list=getSheetList();
+  list.splice(idx,1);
+  saveSheetList(list);
+  renderSheetRows();
+}
+
+async function syncSheet(idx){
+  const list=getSheetList();
+  const sheet=list[idx];
+  if(!sheet)return;
+  clearLog('gsLog');
+  await importGoogleSheets(true, sheet.url, sheet.label);
+}
+
+async function syncAllSheets(){
+  clearLog('gsLog');
+  const list=getSheetList();
+  if(!list.length){log('gsLog','⚠️ Nenhuma planilha vinculada','warn');return;}
+  for(const sheet of list){
+    await importGoogleSheets(true, sheet.url, sheet.label);
   }
 }
 
-async function importGoogleSheets(autoMode){
-  const urlInput=document.getElementById('gsUrl');
-  const url=(urlInput?urlInput.value.trim():'')||localStorage.getItem(GS_KEY)||'';
-  if(!autoMode)clearLog('gsLog');
-  if(!url){log('gsLog','⚠️ Cole o link do Google Sheets','warn');return;}
+function loadSavedGsUrl(){
+  // migrate legacy single URL if exists
+  const legacy=localStorage.getItem('re_gs_url');
+  if(legacy){
+    const list=getSheetList();
+    if(!list.find(s=>s.url===legacy)){
+      list.unshift({url:legacy,label:'Webinário - Filipe Melchior'});
+      saveSheetList(list);
+    }
+  }
+  renderSheetRows();
+}
+
+function updateSyncStatus(){ renderSheetRows(); }
+
+async function importGoogleSheets(autoMode, sheetUrl, sheetLabel){
+  const url=sheetUrl||(document.getElementById('gsUrl')?document.getElementById('gsUrl').value.trim():'')||'';
+  if(!url){log('gsLog','⚠️ URL inválida','warn');return;}
   const match=url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if(!match){log('gsLog','❌ Link inválido','err');return;}
-  localStorage.setItem(GS_KEY,url);
-  updateSyncStatus();
-  log('gsLog',autoMode?'🔄 Sincronizando...':'🔄 Conectando ao Google Sheets...');
+  if(!match){log('gsLog','❌ Link inválido: '+url.slice(0,40),'err');return;}
+  log('gsLog',`🔄 ${sheetLabel?'['+sheetLabel+'] ':''}Sincronizando...`);
   const sid=match[1];
   try{
     let res=await fetch(`https://docs.google.com/spreadsheets/d/${sid}/export?format=csv`);
-    if(!res.ok)throw new Error('Sem acesso ('+res.status+'). Planilha precisa ser pública: Compartilhar → Qualquer pessoa com o link → Leitor');
+    if(!res.ok)throw new Error('Sem acesso ('+res.status+'). Planilha precisa ser pública.');
     const text=await res.text();
     const wb=XLSX.read(text,{type:'string'});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -970,21 +1030,19 @@ async function importGoogleSheets(autoMode){
       if(r.some(c=>String(c).includes('test lead')))return false;
       return r.some(c=>c!=='');
     });
-    log('gsLog','✓ '+rows.length+' leads encontrados na planilha','ok');
+    log('gsLog',`✓ ${rows.length} leads encontrados`+(sheetLabel?' em ['+sheetLabel+']':''),'ok');
     importedHeaders=headers;
     importedRows=rows;
     if(autoMode){
-      await applyKnownMapping();
+      await applyKnownMapping(sheetLabel);
     } else {
       buildMapping();
       buildPreview([headers,...rows.slice(0,5)]);
     }
-  }catch(err){log('gsLog','❌ '+err.message,'err');}
+  }catch(err){log('gsLog','❌ '+(sheetLabel?'['+sheetLabel+'] ':'')+err.message,'err');}
 }
 
-async function applyKnownMapping(){
-  // Auto-mapping for "webinario - Filipe Melchior" Meta Ads sheet
-  // Columns: 0=id,1=created_time,3=ad_name,12=loja,14=fat,16=full_name,17=phone_number
+async function applyKnownMapping(sheetLabel){
   const existingWpp=new Set(LEADS.map(l=>l.wpp.replace(/^p:/,'')));
   const toInsert=[];
   importedRows.forEach(row=>{
@@ -1001,13 +1059,13 @@ async function applyKnownMapping(){
       caixa:'nao informado',notes:adName?'Criativo: '+adName:''});
     existingWpp.add(wpp);
   });
-  if(!toInsert.length){log('gsLog','✅ Tudo sincronizado — nenhum lead novo','ok');return;}
+  if(!toInsert.length){log('gsLog','✅ '+(sheetLabel?'['+sheetLabel+'] ':'')+'Tudo sincronizado — nenhum lead novo','ok');return;}
   setSync('syncing');
   const{error,data}=await db.from('leads').insert(toInsert).select();
   if(error){setSync('off');log('gsLog','❌ Erro: '+error.message,'err');return;}
   LEADS=[...(data||[]),...LEADS];
   setSync('ok');
-  log('gsLog','✅ '+toInsert.length+' leads novos importados com sucesso!','ok');
+  log('gsLog','✅ '+(sheetLabel?'['+sheetLabel+'] ':'')+toInsert.length+' leads novos importados!','ok');
   importedRows=[];importedHeaders=[];
   document.getElementById('mappingSection').style.display='none';
   document.getElementById('previewSection').style.display='none';
@@ -1189,10 +1247,18 @@ document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click
 // INIT
 // ══════════════════════════════════════════════════════
 loadAll();
-// Pre-load known Google Sheets URL
-if(!localStorage.getItem('re_gs_url')){
-  localStorage.setItem('re_gs_url','https://docs.google.com/spreadsheets/d/1fek-QSRJ_NF9FKG34xVt7EIII5NOKicVVp8CvR_513I/edit');
-}
+// Pre-load known Google Sheets URL (first time only)
+(function(){
+  const KEY='re_gs_urls';
+  try{
+    const list=JSON.parse(localStorage.getItem(KEY))||[];
+    const known='https://docs.google.com/spreadsheets/d/1fek-QSRJ_NF9FKG34xVt7EIII5NOKicVVp8CvR_513I/edit';
+    if(!list.find(s=>s.url===known)){
+      list.unshift({url:known,label:'Webinário - Filipe Melchior'});
+      localStorage.setItem(KEY,JSON.stringify(list));
+    }
+  }catch(e){}
+})();
 loadSavedGsUrl();
 </script>
 </body>
