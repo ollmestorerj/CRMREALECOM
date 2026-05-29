@@ -1189,6 +1189,10 @@ document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click
 // INIT
 // ══════════════════════════════════════════════════════
 loadAll();
+// Pre-load known Google Sheets URL
+if(!localStorage.getItem('re_gs_url')){
+  localStorage.setItem('re_gs_url','https://docs.google.com/spreadsheets/d/1fek-QSRJ_NF9FKG34xVt7EIII5NOKicVVp8CvR_513I/edit');
+}
 loadSavedGsUrl();
 </script>
 </body>
