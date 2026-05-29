@@ -104,8 +104,10 @@ td.name{color:var(--text);font-weight:500}
 .status-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:500;white-space:nowrap}
 .s-lead{background:rgba(99,102,241,.15);color:#818cf8}
 .s-agendado{background:rgba(234,179,8,.15);color:#fbbf24}
+.s-noshow{background:rgba(244,63,94,.15);color:#fb7185}
 .s-call{background:rgba(249,115,22,.15);color:var(--orange-l)}
 .s-proposta{background:rgba(147,51,234,.2);color:var(--purple-l)}
+.s-followup{background:rgba(6,182,212,.15);color:#22d3ee}
 .s-fechado{background:rgba(34,197,94,.15);color:var(--green)}
 .s-perdido{background:rgba(239,68,68,.1);color:#f87171}
 /* IMPORT */
@@ -302,9 +304,14 @@ td.name{color:var(--text);font-weight:500}
           <input class="search-input" id="searchInput" placeholder="🔍  Buscar lead..." oninput="renderLeadsTable()">
           <select class="filter-select" id="filterStatus" onchange="renderLeadsTable()">
             <option value="">Todos os status</option>
-            <option value="lead">Lead captado</option><option value="agendado">Agendamento feito</option>
-            <option value="call">Call realizada</option><option value="proposta">Proposta enviada</option>
-            <option value="fechado">Venda fechada</option><option value="perdido">Perdido</option>
+            <option value="lead">Lead captado</option>
+            <option value="agendado">Agendamento feito</option>
+            <option value="noshow">No show</option>
+            <option value="call">Call realizada</option>
+            <option value="proposta">Proposta enviada</option>
+            <option value="followup">Follow up</option>
+            <option value="fechado">Venda fechada</option>
+            <option value="perdido">Perdido</option>
           </select>
           <select class="filter-select" id="filterSource" onchange="renderLeadsTable()">
             <option value="">Todas as origens</option>
@@ -422,7 +429,7 @@ td.name{color:var(--text);font-weight:500}
       <div class="form-group"><label class="form-label">Origem</label>
         <select class="form-select" id="lSource"><option value="webinar">Webinário</option><option value="landing">Landing Page</option><option value="manual">Manual</option></select></div>
       <div class="form-group"><label class="form-label">Status</label>
-        <select class="form-select" id="lStatus"><option value="lead">Lead captado</option><option value="agendado">Agendamento feito</option><option value="call">Call realizada</option><option value="proposta">Proposta enviada</option><option value="fechado">Venda fechada</option><option value="perdido">Perdido</option></select></div>
+        <select class="form-select" id="lStatus"><option value="lead">Lead captado</option><option value="agendado">Agendamento feito</option><option value="noshow">No show</option><option value="call">Call realizada</option><option value="proposta">Proposta enviada</option><option value="followup">Follow up</option><option value="fechado">Venda fechada</option><option value="perdido">Perdido</option></select></div>
     </div>
     <div class="form-grid">
       <div class="form-group"><label class="form-label">Tem loja no ML?</label>
@@ -601,9 +608,9 @@ function renderPage(p){
 // ══════════════════════════════════════════════════════
 function renderDashboard(){
   const ls=LEADS,total=ls.length;
-  const agend=ls.filter(l=>['agendado','call','proposta','fechado'].includes(l.status)).length;
-  const calls=ls.filter(l=>['call','proposta','fechado'].includes(l.status)).length;
-  const prop=ls.filter(l=>['proposta','fechado'].includes(l.status)).length;
+  const agend=ls.filter(l=>['agendado','noshow','call','proposta','followup','fechado'].includes(l.status)).length;
+  const calls=ls.filter(l=>['call','proposta','followup','fechado'].includes(l.status)).length;
+  const prop=ls.filter(l=>['proposta','followup','fechado'].includes(l.status)).length;
   const fech=ls.filter(l=>l.status==='fechado').length;
   const perd=ls.filter(l=>l.status==='perdido').length;
   const pct=n=>total?Math.round(n/total*100):0;
@@ -633,8 +640,10 @@ function renderDashboard(){
 const STAGES=[
   {id:'lead',label:'Lead captado',color:'#6366F1'},
   {id:'agendado',label:'Agendamento feito',color:'#EAB308'},
+  {id:'noshow',label:'No show',color:'#F43F5E'},
   {id:'call',label:'Call realizada',color:'#F97316'},
   {id:'proposta',label:'Proposta enviada',color:'#9333EA'},
+  {id:'followup',label:'Follow up',color:'#06B6D4'},
   {id:'fechado',label:'Venda fechada',color:'#22C55E'},
   {id:'perdido',label:'Perdido',color:'#EF4444'},
 ];
@@ -765,7 +774,7 @@ async function onDrop(e,el){ e.preventDefault(); }
 // ══════════════════════════════════════════════════════
 // LEADS TABLE
 // ══════════════════════════════════════════════════════
-const SL2={lead:'Lead captado',agendado:'Agendamento feito',call:'Call realizada',proposta:'Proposta enviada',fechado:'Venda fechada',perdido:'Perdido'};
+const SL2={lead:'Lead captado',agendado:'Agendamento feito',noshow:'No show',call:'Call realizada',proposta:'Proposta enviada',followup:'Follow up',fechado:'Venda fechada',perdido:'Perdido'};
 function renderLeadsTable(){
   const q=(document.getElementById('searchInput')?.value||'').toLowerCase();
   const fs=document.getElementById('filterStatus')?.value||'';
